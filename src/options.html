@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Form Rewind の設定</title>
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Form Rewind の設定</h1>
+      <p class="muted">入力内容はこのブラウザの中(拡張機能専用の保存領域)にだけ保存され、外部へは送信しません。パスワード欄は保存しません。</p>
+
+      <section>
+        <h2>動作</h2>
+        <form id="prefs">
+          <label class="check"><input name="showToast" type="checkbox" /> ページごとに最初の自動保存で通知を出す</label>
+          <label class="check"><input name="autoload" type="checkbox" /> オートロード: 「すべてのフィールドを保存」した値を、ページを開いたときに空欄へ自動で入れる</label>
+          <div class="grid">
+            <label for="maxPerPage">1ページあたりに残す履歴の件数</label>
+            <input id="maxPerPage" name="maxPerPage" type="number" min="1" max="200" required />
+            <label for="retentionDays">履歴を残す日数</label>
+            <input id="retentionDays" name="retentionDays" type="number" min="1" max="365" required />
+          </div>
+          <p class="muted small">固定した履歴は、件数と日数の上限で消えません。</p>
+          <div><button type="submit" class="primary">保存</button></div>
+          <p id="prefs-message" class="message" role="status" hidden></p>
+        </form>
+      </section>
+
+      <section>
+        <h2>自動保存を一時停止しているサイト</h2>
+        <ul id="paused" class="rows"></ul>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>保存したフィールド(すべてのフィールドを保存)</h2>
+          <a href="saved-fields.html" class="link-button">保存内容を見る・編集</a>
+        </div>
+        <p class="muted small">ショートカットは <code>chrome://extensions/shortcuts</code> で割り当てられます(初期状態では割り当てていません)。</p>
+        <ul id="field-sets" class="rows"></ul>
+      </section>
+
+      <section>
+        <h2>入力履歴</h2>
+        <p id="stats" class="muted"></p>
+        <ul id="domains" class="rows"></ul>
+        <div class="danger-zone">
+          <button id="delete-all" type="button" class="danger-quiet">入力履歴をすべて削除</button>
+          <span class="muted small">固定した履歴も含めて削除します。保存したフィールドは消えません。</span>
+        </div>
+      </section>
+    </main>
+    <script src="settings.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

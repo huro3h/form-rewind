@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>保存したフィールド - Form Rewind</title>
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="saved-fields.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="title-row">
+        <h1>保存したフィールド</h1>
+        <div class="io-actions">
+          <button id="export" type="button">JSON でエクスポート</button>
+          <button id="import" type="button">JSON からインポート</button>
+          <input id="import-file" type="file" accept=".json,application/json" hidden />
+        </div>
+      </div>
+      <p class="muted small">
+        「すべてのフィールドを保存」で保存した値です。値はその場で編集できます。
+        「自動」を外した項目は、オートロードでは入れず、手動の「すべて読み込む」でだけ入れます。
+      </p>
+    </header>
+
+    <div class="layout">
+      <nav class="sites" aria-label="サイト">
+        <h2 class="small muted">サイト</h2>
+        <ul id="sites"></ul>
+        <p id="no-sites" class="muted small" hidden>まだありません。ポップアップの「すべてのフィールドを保存」で保存できます。</p>
+      </nav>
+
+      <main id="editor" hidden>
+        <div class="editor-head">
+          <div>
+            <h2 id="origin"></h2>
+            <p id="meta" class="muted small"></p>
+          </div>
+          <div class="head-actions">
+            <input id="filter" type="search" placeholder="項目名・値で絞り込み" aria-label="項目名・値で絞り込み" />
+            <button id="delete-site" type="button" class="danger-quiet">このサイトの分をすべて消去</button>
+          </div>
+        </div>
+        <p id="autoload-off" class="notice small" hidden>
+          オートロードは設定でオフになっています。「自動」の欄は、オンにしたときに効きます。
+        </p>
+
+        <table class="fields">
+          <thead>
+            <tr>
+              <th class="col-type">種類</th>
+              <th class="col-name">項目</th>
+              <th class="col-value">値</th>
+              <th class="col-auto">自動</th>
+              <th class="col-remove"><span class="visually-hidden">削除</span></th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p id="no-match" class="muted small" hidden>絞り込みに当てはまる項目はありません。</p>
+      </main>
+    </div>
+
+    <div id="savebar" class="savebar" hidden>
+      <span id="savebar-text">未保存の変更があります</span>
+      <button id="revert" type="button">元に戻す</button>
+      <button id="save" type="button" class="primary">保存</button>
+    </div>
+    <p id="message" class="message toast" role="status" hidden></p>
+
+    <script src="settings.js"></script>
+    <script src="saved-fields.js"></script>
+  </body>
+</html>

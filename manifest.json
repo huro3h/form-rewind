@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "Form Rewind",
+  "version": "1.0.0",
+  "description": "フォームの入力内容を自動で保存し、消えてもワンクリックで復元。履歴の差分を見て項目ごとに戻せる。外部通信なし。",
+  "minimum_chrome_version": "102",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Form Rewind",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/settings.js",
+        "src/fields.js",
+        "src/page-ui.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "commands": {
+    "01_save-fields": {
+      "description": "すべてのフィールドを保存"
+    },
+    "02_load-fields": {
+      "description": "すべてのフィールドを読み込む"
+    },
+    "03_load-empty-fields": {
+      "description": "保存したフィールドを空欄にだけ読み込む"
+    }
+  }
+}

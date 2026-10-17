@@ -1,0 +1,132 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --surface: #f8f9fa;
+  --fg: #202124;
+  --sub: #5f6368;
+  --line: #dadce0;
+  --accent: #1a73e8;
+  --accent-fg: #ffffff;
+  --danger: #d93025;
+  --changed: #fef7e0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #202124;
+    --surface: #292a2d;
+    --fg: #e8eaed;
+    --sub: #9aa0a6;
+    --line: #3c4043;
+    --accent: #8ab4f8;
+    --accent-fg: #202124;
+    --danger: #f28b82;
+    --changed: #3b3420;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* display を指定した要素でも hidden 属性を効かせる */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 system-ui, -apple-system, "Hiragino Sans", sans-serif;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  padding: 5px 12px;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+
+button.link {
+  border: none;
+  padding: 2px 4px;
+  color: var(--accent);
+}
+
+button.danger-quiet,
+button.danger-link {
+  color: var(--danger);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="search"],
+select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 4px 8px;
+}
+
+.muted {
+  color: var(--sub);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.check {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.check input {
+  margin: 3px 0 0;
+}
+
+.message {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.message.error {
+  color: var(--danger);
+}
