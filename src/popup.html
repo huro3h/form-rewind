@@ -33,65 +33,9 @@
         </div>
         <label class="check"><input id="autoload" type="checkbox" /> オートロード(ページを開いたら空欄に自動で入れる)</label>
       </section>
-
-      <section id="pinned-section" class="card" hidden>
-        <h2>固定した履歴</h2>
-        <ul id="pinned" class="list"></ul>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <h2>このページの履歴</h2>
-          <button id="restore-latest" type="button" class="link" hidden>最新を復元</button>
-        </div>
-        <ul id="history" class="list"></ul>
-        <p id="history-empty" class="muted small" hidden></p>
-      </section>
-
-      <label class="check footer-check"><input id="site-autosave" type="checkbox" /> <span id="site-autosave-label"></span></label>
     </main>
 
-    <section id="diff" hidden>
-      <div class="section-head">
-        <button id="diff-back" type="button" class="link">← 戻る</button>
-        <span id="diff-title" class="muted small"></span>
-      </div>
-      <p class="muted small">左が保存した内容、右が今のページの内容です。チェックした項目だけを戻せます。</p>
-      <label class="check"><input id="diff-all" type="checkbox" /> 違う項目をすべて選ぶ</label>
-      <ul id="diff-list" class="diff-list"></ul>
-      <div class="button-row">
-        <button id="diff-restore" type="button" class="primary" disabled>選んだ項目を復元</button>
-      </div>
-    </section>
-
     <p id="message" class="message" role="status" hidden></p>
-
-    <template id="item-template">
-      <li class="item">
-        <div class="item-main">
-          <div class="item-line">
-            <span class="item-name"></span>
-            <span class="item-meta muted small"></span>
-          </div>
-          <div class="item-preview muted small"></div>
-        </div>
-        <div class="item-actions">
-          <button type="button" data-action="restore" class="link">復元</button>
-          <button type="button" data-action="diff" class="link">差分</button>
-          <button type="button" data-action="pin" class="link">固定</button>
-          <button type="button" data-action="unpin" class="link">固定を解除</button>
-          <button type="button" data-action="delete" class="link danger-link">削除</button>
-        </div>
-        <form class="pin-form" hidden>
-          <input name="name" type="text" maxlength="50" required placeholder="名前(例: 問い合わせの定型文)" />
-          <select name="scope">
-            <option value="page">このページで使う</option>
-            <option value="site">このサイト全体で使う</option>
-          </select>
-          <button type="submit" class="primary">固定する</button>
-        </form>
-      </li>
-    </template>
 
     <script src="settings.js"></script>
     <script src="popup.js"></script>

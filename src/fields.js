@@ -1,4 +1,4 @@
-// 入力欄の列挙・値の読み書き・保存した欄と今のページの欄の突き合わせ。
+// 入力欄の列挙・値の読み書き。
 // content script の各フレームで読まれる。
 (() => {
   "use strict";
@@ -9,7 +9,6 @@
   const UNSAVED_INPUT_TYPES = new Set(["password", "hidden", "file", "submit", "button", "reset", "image"]);
   const PASSWORD_AUTOCOMPLETE = /(^|\s)(current-password|new-password)(\s|$)/i;
   const SEARCH_NAME = /^(q|s|query|search|keyword|keywords)$/i;
-  const AUTO_ID = /\d{3,}|^:.*:$|[0-9a-f]{8,}|^(ember|react|radix|headlessui|mui|rc|__)[-_:]/i;
   const LABEL_MAX = 80;
   const BLOCKED_TAGS = "script, style, iframe, frame, object, embed, link, meta, base";
   const BLOCK_TAGS = "p, div, li, h1, h2, h3, h4, h5, h6, tr, blockquote, pre";
@@ -42,30 +41,6 @@
     return parts.join("/");
   }
 
-  function elementAt(path) {
-    if (!path) return null;
-    let node = document;
-    for (const part of path.split("/")) {
-      if (part === SHADOW) {
-        node = node.shadowRoot;
-      } else {
-        const m = /^([a-z0-9-]+)\[(\d+)\]$/.exec(part);
-        if (!m) return null;
-        let count = 0;
-        let found = null;
-        for (const child of node.children) {
-          if (child.tagName.toLowerCase() === m[1] && ++count === Number(m[2])) {
-            found = child;
-            break;
-          }
-        }
-        node = found;
-      }
-      if (!node) return null;
-    }
-    return node.nodeType === Node.ELEMENT_NODE ? node : null;
-  }
-
   // ---- 列挙 ----
 
   function queryAllDeep(root, out = []) {
@@ -91,7 +66,7 @@
     return typeOf(el) === "password" || PASSWORD_AUTOCOMPLETE.test(el.getAttribute("autocomplete") || "");
   }
 
-  // 安全のためではなく、検索するたびに履歴が増えて復元バナーが出るのを防ぐために外す。
+  // 安全のためではなく、オートロードで検索ボックスに前の検索語が入るのを防ぐために外す。
   function isSearchField(el) {
     if (typeOf(el) === "search" || el.getAttribute("role") === "searchbox") return true;
     if (el.closest('[role="search"]')) return true;
@@ -162,8 +137,7 @@
     return { value: el.value };
   }
 
-  // ページの初期値から変わっているか。保存するかどうかの判定に使う
-  // (既定でチェック済みの欄があるだけのページで履歴を作らないため)。
+  // ページの初期値から変わっているか。選択式の欄が「入力済み」かの判定に使う。
   function isChanged(el) {
     const type = typeOf(el);
     if (type === "checkbox" || type === "radio") return el.checked !== el.defaultChecked;
@@ -177,7 +151,7 @@
     return el.value.trim() !== "" && el.value !== el.defaultValue;
   }
 
-  function describe(el, nameIndex, nameCount) {
+  function describe(el) {
     return {
       path: pathOf(el),
       tag: el.tagName,
@@ -185,40 +159,13 @@
       name: el.getAttribute("name") || "",
       id: el.id || "",
       label: findLabel(el),
-      nameIndex,
-      nameCount,
       ...readValue(el),
     };
   }
 
-  function groupKey(tag, type, name, value) {
-    const choice = type === "checkbox" || type === "radio";
-    return [tag, type, name, choice ? value : ""].join("|");
-  }
-
-  function keyOfElement(el) {
-    return groupKey(el.tagName, typeOf(el), el.getAttribute("name") || "", el.value);
-  }
-
-  function keyOfStored(f) {
-    return groupKey(f.tag, f.type || "", f.name || "", f.value ?? "");
-  }
-
-  // 今のページの全欄を保存用の形にする。同じ name の欄が並ぶ場合に備え、何番目かも持たせる。
+  // 今のページの全欄を保存用の形にする。
   function collect() {
-    const els = allFields();
-    const totals = new Map();
-    els.forEach((el) => totals.set(keyOfElement(el), (totals.get(keyOfElement(el)) || 0) + 1));
-    const seen = new Map();
-    return {
-      changed: els.some(isChanged),
-      items: els.map((el) => {
-        const key = keyOfElement(el);
-        const index = seen.get(key) || 0;
-        seen.set(key, index + 1);
-        return { el, field: describe(el, index, totals.get(key)) };
-      }),
-    };
+    return allFields().map((el) => ({ el, field: describe(el) }));
   }
 
   // 空欄扱いか。文字の欄は空かどうか、選択式の欄は初期状態から動いていないかで見る。
@@ -231,61 +178,6 @@
 
   function isRendered(el) {
     return el.getClientRects().length > 0;
-  }
-
-  // ---- 突き合わせ ----
-  // DOM が組み変わっていても戻せるよう、パス → 固定 id → name(+何番目か) → ラベルの順に探す。
-
-  function sameKind(el, f) {
-    return el.tagName === f.tag && typeOf(el) === (f.type || "");
-  }
-
-  function sameField(el, f) {
-    if (!sameKind(el, f)) return false;
-    const name = el.getAttribute("name") || "";
-    if (f.name && name && f.name !== name) return false;
-    if ((f.type === "checkbox" || f.type === "radio") && el.value !== f.value) return false;
-    return true;
-  }
-
-  function matchElements(stored, candidates = allFields()) {
-    const result = new Array(stored.length).fill(null);
-    const used = new Set();
-    const assign = (i, el) => {
-      if (!el || used.has(el)) return;
-      used.add(el);
-      result[i] = el;
-    };
-    const groups = new Map();
-    candidates.forEach((el) => {
-      const key = keyOfElement(el);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(el);
-    });
-
-    const candidateSet = new Set(candidates);
-    stored.forEach((f, i) => {
-      const el = elementAt(f.path);
-      if (el && candidateSet.has(el) && sameField(el, f)) assign(i, el);
-    });
-    stored.forEach((f, i) => {
-      if (result[i] || !f.id || AUTO_ID.test(f.id)) return;
-      const hits = candidates.filter((el) => !used.has(el) && el.id === f.id && sameKind(el, f));
-      if (hits.length === 1) assign(i, hits[0]);
-    });
-    // 同じ name の欄の数が保存時と同じなら「何番目か」で、1つしかなければそれに当てる。
-    stored.forEach((f, i) => {
-      if (result[i] || !f.name) return;
-      const group = groups.get(keyOfStored(f)) || [];
-      if (f.nameCount === group.length) assign(i, group[f.nameIndex]);
-      else if (group.length === 1) assign(i, group[0]);
-    });
-    stored.forEach((f, i) => {
-      if (result[i] || !f.label) return;
-      const hits = candidates.filter((el) => !used.has(el) && sameKind(el, f) && findLabel(el) === f.label);
-      if (hits.length === 1) assign(i, hits[0]);
-    });
-    return result;
   }
 
   // ---- 書き込み ----
@@ -384,7 +276,7 @@
     return () => writeValue(el, before);
   }
 
-  // 一覧や差分で見せる文字列。
+  // 入力が変わったかを比べるための文字列。
   function displayOf(f) {
     if (f.values) return f.values.join(", ");
     if (f.checked !== undefined) return f.checked ? "オン" : "オフ";
@@ -396,10 +288,7 @@
   window.FormRewindFields = {
     UI_HOST_ID,
     FIELD_SELECTOR,
-    allFields,
     collect,
-    matchElements,
-    isChanged,
     isFilled,
     isRendered,
     readValue,

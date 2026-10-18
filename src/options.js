@@ -84,40 +84,12 @@ function emptyRow(text) {
 }
 
 async function renderPrefs() {
-  const s = await getSettings();
-  const form = $("prefs");
-  form.elements.autosave.checked = s.autosave;
-  form.elements.showToast.checked = s.showToast;
-  form.elements.autoload.checked = s.autoload;
-  form.elements.maxPerPage.value = s.maxPerPage;
-  form.elements.retentionDays.value = s.retentionDays;
-
-  // 全体の自動保存がオンなら一時停止しているサイト、オフなら自動保存するサイトを並べる。
-  const key = s.autosave ? "pausedDomains" : "enabledDomains";
-  $("sites-title").textContent = s.autosave ? "自動保存を一時停止しているサイト" : "自動保存するサイト";
-  const sites = s[key].map((domain) =>
-    row(domain, "", s.autosave ? "再開" : "外す", async () => {
-      const current = await getSettings();
-      await setSettings({ [key]: current[key].filter((d) => d !== domain) });
-      renderPrefs();
-    })
-  );
-  const empty = s.autosave ? "ありません。ポップアップから一時停止できます。" : "ありません。ポップアップから選べます。";
-  $("sites").replaceChildren(...(sites.length ? sites : [emptyRow(empty)]));
+  $("autoload").checked = (await getSettings()).autoload;
 }
 
 async function renderData() {
   const stats = await send({ type: "GET_STATS" });
   if (!stats.ok) return;
-  $("stats").textContent = `${stats.total}件(うち固定 ${stats.pinned}件)`;
-  const domains = stats.domains.map((d) =>
-    row(d.domain, `${d.count}件`, "このサイトの履歴を削除", async () => {
-      await send({ type: "DELETE_DOMAIN_HISTORY", domain: d.domain });
-      renderData();
-    }, { confirm: true })
-  );
-  $("domains").replaceChildren(...(domains.length ? domains : [emptyRow("履歴はまだありません。")]));
-
   const sets = stats.fieldSets.map((fs) =>
     row(fs.origin, `${fs.count}項目・${absoluteTime(fs.updatedAt)} 更新`, "消去", async () => {
       await send({ type: "CLEAR_FIELD_SET", origin: fs.origin });
@@ -127,35 +99,9 @@ async function renderData() {
   $("field-sets").replaceChildren(...(sets.length ? sets : [emptyRow("ありません。ポップアップの「すべてのフィールドを保存」で保存できます。")]));
 }
 
-$("prefs").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const message = $("prefs-message");
-  const maxPerPage = Number(form.elements.maxPerPage.value);
-  const retentionDays = Number(form.elements.retentionDays.value);
-  message.hidden = false;
-  if (!Number.isInteger(maxPerPage) || maxPerPage < 1 || maxPerPage > 200 || !Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 365) {
-    message.textContent = "件数は1〜200、日数は1〜365の整数で入力してください。";
-    message.classList.add("error");
-    return;
-  }
-  await setSettings({
-    autosave: form.elements.autosave.checked,
-    showToast: form.elements.showToast.checked,
-    autoload: form.elements.autoload.checked,
-    maxPerPage,
-    retentionDays,
-  });
-  message.textContent = "保存しました。";
-  message.classList.remove("error");
-});
+$("autoload").addEventListener("change", (e) => setSettings({ autoload: e.target.checked }));
 
-confirmButton($("delete-all"), "入力履歴をすべて削除", async () => {
-  await send({ type: "DELETE_ALL_HISTORY" });
-  renderData();
-});
-
-// ポップアップでサイトの自動保存を切り替えたときなどに追随する。
+// ポップアップでオートロードを切り替えたときに追随する。
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[SETTINGS_KEY]) renderPrefs();
 });

@@ -1,4 +1,4 @@
-// 自動保存・復元バナー・元に戻す・差分・固定・すべてのフィールドを保存/オートロード・一時停止の E2E。
+// すべてのフィールドを保存/読み込み/オートロード・バッジ・編集画面・エクスポート/インポートの E2E。
 // 本物のツールバーのポップアップは Playwright から開けないので、popup.html を普通のタブで開き、
 // chrome.tabs.query だけ差し替えて「フォームのタブで開いた」ことにする。
 const { chromium } = require('playwright');
@@ -8,7 +8,6 @@ const { server, PORT } = require('./fixture.js');
 const BRAVE = '/Applications/Brave Browser Nightly.app/Contents/MacOS/Brave Browser Nightly';
 const EXT = path.resolve(__dirname, '..');
 const BASE = `http://localhost:${PORT}`;
-const SAVE_WAIT_MS = 2000; // 自動保存の待ち(1 秒)+余裕
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
@@ -35,7 +34,7 @@ const check = (name, ok, detail) => {
     sw.evaluate(
       (store) =>
         new Promise((resolve, reject) => {
-          const req = indexedDB.open('form-rewind', 1);
+          const req = indexedDB.open('form-rewind', 2);
           req.onupgradeneeded = () => req.transaction.abort();
           req.onerror = () => resolve([]);
           req.onsuccess = () => {
@@ -49,8 +48,19 @@ const check = (name, ok, detail) => {
         }),
       store
     );
-  const snapshotsOf = async (pathname) =>
-    (await dbAll('snapshots')).filter((r) => r.pageKey === BASE + pathname);
+  const storeNames = () =>
+    sw.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const req = indexedDB.open('form-rewind');
+          req.onsuccess = () => {
+            const names = Array.from(req.result.objectStoreNames);
+            req.result.close();
+            resolve(names);
+          };
+          req.onerror = () => resolve([]);
+        })
+    );
   const badgeOf = (tabId) =>
     sw.evaluate(async (tabId) => ({
       text: await chrome.action.getBadgeText({ tabId }),
@@ -65,89 +75,21 @@ const check = (name, ok, detail) => {
   const frameOf = (p) => p.frames().find((f) => f.url().endsWith('/frame'));
   const ui = (p) => p.locator('#form-rewind-ui');
 
-  // ---- 自動保存(既定はオフ) ----
+  // ---- 入力しただけでは保存しない(2.1 で自動保存をなくした) ----
   await page.goto(`${BASE}/form`);
   await sleep(500);
-  await page.fill('#name', '既定では保存しない入力');
-  await sleep(SAVE_WAIT_MS);
-  check('既定では自動保存しない', (await snapshotsOf('/form')).length === 0);
-  check('自動保存しないときは通知も出ない', (await ui(page).locator('.toast').count()) === 0);
-  await sw.evaluate(() =>
-    chrome.storage.local.set({ settings: { ...globalThis.FORM_REWIND_DEFAULTS, autosave: true } })
-  );
-  await page.reload();
-  await sleep(500);
   await page.fill('#name', '山田太郎');
-  await page.fill('#email', 'taro@example.com');
-  await page.fill('#body', 'お問い合わせの本文です。消えると困る長い文章。');
-  await page.check('#agree');
-  await page.check('#plan-b');
-  await page.selectOption('#pref', 'osaka');
+  await page.fill('#body', 'お問い合わせの本文です。');
   await page.fill('#pw', 'secret-pass');
   await page.fill('#q', '検索語');
   await frameOf(page).fill('#note', '埋め込みメモ');
-  await sleep(SAVE_WAIT_MS);
-
-  const [top] = await snapshotsOf('/form');
-  const [inFrame] = await snapshotsOf('/frame');
-  const names = top ? top.fields.map((f) => f.name) : [];
-  check('入力すると自動で保存される', !!top && names.includes('name') && names.includes('body'));
-  check('パスワード欄は保存しない', !!top && !names.includes('pw'), names.join(','));
-  check('検索欄は保存しない', !!top && !names.includes('q'));
-  check('iframe の入力は最上位のページに紐づけて保存', !!inFrame && inFrame.topKey === `${BASE}/form`);
-  check('最初の保存で通知が出る', (await ui(page).locator('.toast').textContent().catch(() => '')).includes('自動で保存'));
-
-  // ---- 再読み込み → バナー → 復元 → 元に戻す ----
+  await sleep(2000);
+  check('入力しただけでは何も保存しない', (await dbAll('fieldSets')).length === 0);
+  check('入力しても通知を出さない', (await ui(page).locator('.toast').count()) === 0);
+  check('自動保存の履歴の保存先を持たない', !(await storeNames()).includes('snapshots'), (await storeNames()).join(','));
   await page.reload();
-  const banner = ui(page).locator('.banner');
-  await banner.waitFor({ timeout: 5000 }).catch(() => {});
-  check('再読み込みすると復元バナーが出る', await banner.isVisible());
-  await banner.getByText('復元する').click();
-  await sleep(800);
-  const restored = await page.evaluate(() => ({
-    name: document.getElementById('name').value,
-    email: document.getElementById('email').value,
-    body: document.getElementById('body').value,
-    agree: document.getElementById('agree').checked,
-    planB: document.getElementById('plan-b').checked,
-    pref: document.getElementById('pref').value,
-    pw: document.getElementById('pw').value,
-  }));
-  check(
-    'バナーから全項目を復元できる',
-    restored.name === '山田太郎' && restored.email === 'taro@example.com' && restored.body.startsWith('お問い合わせ') &&
-      restored.agree && restored.planB && restored.pref === 'osaka',
-    JSON.stringify(restored)
-  );
-  check('パスワード欄は復元されない', restored.pw === '');
-  check('iframe の入力も復元される', (await frameOf(page).inputValue('#note')) === '埋め込みメモ');
-
-  await ui(page).locator('.toast').getByText('元に戻す').click();
-  await sleep(300);
-  const undone = await page.evaluate(() => ({
-    name: document.getElementById('name').value,
-    planA: document.getElementById('plan-a').checked,
-    planB: document.getElementById('plan-b').checked,
-    agree: document.getElementById('agree').checked,
-  }));
-  check('「元に戻す」で復元前に戻る', undone.name === '' && !undone.planB && !undone.planA && !undone.agree, JSON.stringify(undone));
-
-  // ---- 内容が減ったら、前の履歴を上書きせず別の履歴にする ----
-  await page.fill('#name', '山田太郎');
-  await page.fill('#body', 'とても大事な長い本文をここに書いています。');
-  await sleep(SAVE_WAIT_MS);
-  const before = (await snapshotsOf('/form')).length;
-  await page.fill('#body', '');
-  await sleep(SAVE_WAIT_MS);
-  const after = await snapshotsOf('/form');
-  check(
-    '本文を消した直後の保存で、消す前の履歴が残る',
-    after.length === before + 1 && after.some((r) => r.fields.some((f) => f.value === 'とても大事な長い本文をここに書いています。')),
-    `${before} -> ${after.length}`
-  );
-  await page.fill('#body', 'あ');
-  await sleep(SAVE_WAIT_MS);
-  check('少しずつ書き足すだけなら履歴は増えない', (await snapshotsOf('/form')).length === after.length);
+  await sleep(2500);
+  check('開き直しても復元の案内を出さない', (await ui(page).locator('.toast, .banner').count()) === 0);
 
   // ---- ポップアップ ----
   const formTabId = await tabIdOf('/form');
@@ -166,45 +108,16 @@ const check = (name, ok, detail) => {
     await popup.locator('#main').waitFor();
   };
   await openPopup();
-  const items = popup.locator('#history .item');
-  check('ポップアップにこのページの履歴が並ぶ', (await items.count()) >= 3, `${await items.count()}件`);
-
-  // 差分: 名前だけ変えてメールを消し、名前の行だけを戻す
-  await page.fill('#name', '別の名前');
-  await page.fill('#email', '');
-  await sleep(SAVE_WAIT_MS);
-  await openPopup();
-  const target = popup.locator('#history .item').filter({ hasText: 'とても大事な' }).first();
-  await target.getByRole('button', { name: '差分' }).click();
-  await popup.locator('#diff').waitFor();
-  const changedRows = await popup.locator('.diff-row.changed').count();
-  check('差分で違う項目が強調される', changedRows >= 2, `${changedRows}行`);
-  await popup.locator('.diff-row').filter({ hasText: 'お名前' }).locator('input').check();
-  await popup.locator('#diff-restore').click();
-  await sleep(800);
-  const partial = await page.evaluate(() => ({
-    name: document.getElementById('name').value,
-    email: document.getElementById('email').value,
-  }));
-  check('差分で選んだ項目だけが戻る', partial.name === '山田太郎' && partial.email === '', JSON.stringify(partial));
-
-  // 固定
-  await openPopup();
-  const first = popup.locator('#history .item').first();
-  await first.getByRole('button', { name: '固定', exact: true }).click();
-  await first.locator('input[name=name]').fill('テンプレA');
-  await first.locator('select[name=scope]').selectOption('site');
-  await first.getByRole('button', { name: '固定する' }).click();
-  await sleep(500);
-  const pinnedText = await popup.locator('#pinned').textContent();
-  const pinnedRecords = (await dbAll('snapshots')).filter((r) => r.pinned);
-  check('名前を付けて固定できる', pinnedText.includes('テンプレA') && pinnedRecords.length === 1 && pinnedRecords[0].pinScope === 'site');
+  check('ポップアップに履歴・自動保存の欄が無い', (await popup.locator('#history, #diff, #pinned, #site-autosave').count()) === 0);
 
   // ---- すべてのフィールドを保存 / オートロード ----
   await page.fill('#name', '山田太郎');
   await page.fill('#email', 'taro@example.com');
   await page.fill('#body', '保存した本文');
   await page.selectOption('#pref', 'tokyo');
+  await page.fill('#pw', 'secret-pass');
+  await page.fill('#q', '検索語');
+  await frameOf(page).fill('#note', '埋め込みメモ');
   await openPopup();
   await popup.locator('#fs-save').click();
   await sleep(800);
@@ -212,9 +125,11 @@ const check = (name, ok, detail) => {
   const keys = set ? Object.keys(set.entries) : [];
   check(
     '「すべてのフィールドを保存」でサイトに1組保存される',
-    !!set && set.origin === BASE && keys.some((k) => k.endsWith('@name')) && !keys.some((k) => k.includes('@pw')),
+    !!set && set.origin === BASE && keys.some((k) => k.endsWith('@name')),
     keys.join(' | ')
   );
+  check('パスワード欄・検索欄は保存しない', !keys.some((k) => k.endsWith('@pw') || k.endsWith('@q')));
+  check('iframe の欄も保存する', keys.some((k) => k.endsWith('@note')));
   check('保存の通知が出る', (await ui(page).locator('.toast').textContent().catch(() => '')).includes('項目を保存しました'));
 
   const page2 = await context.newPage();
@@ -230,11 +145,10 @@ const check = (name, ok, detail) => {
   check('オートロード: 同じサイトの別ページでも name が同じ欄に入る', auto.body === '保存した本文' && auto.pref === 'tokyo', JSON.stringify(auto));
   check('オートロード: 入力済みの欄は上書きしない', auto.name === '既定の名前');
   check('オートロード: 後から描かれた欄にも入る', auto.email === 'taro@example.com');
-  check('オートロードでは履歴を作らない', (await snapshotsOf('/form2')).length === 0);
   const form2TabId = await tabIdOf('/form2');
   const autoBadge = await badgeOf(form2TabId);
   check('バッジに読み込んだ項目数が青で出る', autoBadge.text === '3' && autoBadge.color === '26,115,232,255', JSON.stringify(autoBadge));
-  check('履歴のあるページのバッジは ● のまま', (await badgeOf(formTabId)).text === '●');
+  check('読み込んでいないページにはバッジを出さない', (await badgeOf(formTabId)).text === '');
 
   // 手動の読み込み(Shift = 空欄だけ)
   await page2.fill('#body2', '');
@@ -372,30 +286,6 @@ const check = (name, ok, detail) => {
   await popup.locator('#fs-clear').click();
   await sleep(600);
   check('2回押すと保存したフィールドを消去する', (await dbAll('fieldSets')).length === 0);
-
-  // ---- 一時停止 ----
-  await sw.evaluate(() =>
-    chrome.storage.local.set({ settings: { ...globalThis.FORM_REWIND_DEFAULTS, autosave: true, pausedDomains: ['localhost'] } })
-  );
-  await sleep(300);
-  const pausedBefore = (await snapshotsOf('/form2')).length;
-  await page2.fill('#body2', '一時停止中の入力');
-  await sleep(SAVE_WAIT_MS);
-  check('一時停止中のサイトでは保存しない', (await snapshotsOf('/form2')).length === pausedBefore);
-
-  // ---- 全体がオフでも、ポップアップで選んだサイトは自動保存する ----
-  await sw.evaluate(() => chrome.storage.local.set({ settings: { ...globalThis.FORM_REWIND_DEFAULTS } }));
-  await openPopup();
-  check('全体がオフのときは「このサイトでは自動保存する」を出す', (await popup.locator('#site-autosave-label').textContent()) === 'このサイトでは自動保存する');
-  await popup.locator('#site-autosave').check();
-  await sleep(300);
-  await page2.fill('#body2', '選んだサイトの入力');
-  await sleep(SAVE_WAIT_MS);
-  // 直前の保存から 60 秒以内だと上書きになるので、件数ではなく中身で見る。
-  check(
-    'ポップアップで選んだサイトは自動保存する',
-    (await snapshotsOf('/form2')).some((r) => r.fields.some((f) => f.value === '選んだサイトの入力'))
-  );
 
   check('ページ・ポップアップでエラーが出ない', pageErrors.length === 0, pageErrors.join(' / '));
 

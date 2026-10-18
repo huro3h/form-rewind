@@ -24,20 +24,6 @@ section {
   border-radius: 10px;
 }
 
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 100px;
-  gap: 8px 12px;
-  align-items: center;
-  max-width: 420px;
-}
-
 p {
   margin: 0;
 }
@@ -74,14 +60,6 @@ code {
 
 .rows .empty {
   color: var(--sub);
-}
-
-.danger-zone {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
-  margin-top: 16px;
 }
 
 .section-head {

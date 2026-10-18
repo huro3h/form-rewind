@@ -1,10 +1,10 @@
 // IndexedDB の読み書き。service worker からだけ使う。
-//   snapshots: 自動保存の履歴(固定した履歴もここ。pinned で区別)
 //   fieldSets: 「すべてのフィールドを保存」の中身。オリジンごとに1件
+// 版 1 にあった snapshots(自動保存の履歴)は、2.1 で自動保存をなくしたので版 2 で消す。
 
 const DB_NAME = "form-rewind";
-const DB_VERSION = 1;
-const SNAPSHOTS = "snapshots";
+const DB_VERSION = 2;
+const OLD_SNAPSHOTS = "snapshots";
 const FIELD_SETS = "fieldSets";
 
 let dbPromise = null;
@@ -15,11 +15,8 @@ function open() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      const snapshots = db.createObjectStore(SNAPSHOTS, { keyPath: "id" });
-      snapshots.createIndex("pageKey", "pageKey");
-      snapshots.createIndex("topKey", "topKey");
-      snapshots.createIndex("domain", "domain");
-      db.createObjectStore(FIELD_SETS, { keyPath: "origin" });
+      if (db.objectStoreNames.contains(OLD_SNAPSHOTS)) db.deleteObjectStore(OLD_SNAPSHOTS);
+      if (!db.objectStoreNames.contains(FIELD_SETS)) db.createObjectStore(FIELD_SETS, { keyPath: "origin" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => {
@@ -48,38 +45,6 @@ async function run(storeName, mode, fn) {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
-}
-
-const newestFirst = (a, b) => b.timestamp - a.timestamp;
-
-export function getSnapshot(id) {
-  return run(SNAPSHOTS, "readonly", (s) => done(s.get(id)));
-}
-
-export function putSnapshot(record) {
-  return run(SNAPSHOTS, "readwrite", (s) => done(s.put(record)));
-}
-
-export function deleteSnapshots(ids) {
-  return run(SNAPSHOTS, "readwrite", (s) => ids.forEach((id) => s.delete(id)));
-}
-
-export async function snapshotsBy(index, value) {
-  const list = await run(SNAPSHOTS, "readonly", (s) => done(s.index(index).getAll(value)));
-  return list.sort(newestFirst);
-}
-
-export async function countBy(index, value) {
-  return run(SNAPSHOTS, "readonly", (s) => done(s.index(index).count(value)));
-}
-
-export async function allSnapshots() {
-  const list = await run(SNAPSHOTS, "readonly", (s) => done(s.getAll()));
-  return list.sort(newestFirst);
-}
-
-export function clearSnapshots() {
-  return run(SNAPSHOTS, "readwrite", (s) => done(s.clear()));
 }
 
 export function getFieldSet(origin) {
