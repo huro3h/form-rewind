@@ -15,6 +15,7 @@
       <section>
         <h2>動作</h2>
         <form id="prefs">
+          <label class="check"><input name="autosave" type="checkbox" /> すべてのサイトで入力内容を自動で保存する(オフのときは、ポップアップで選んだサイトだけ保存する)</label>
           <label class="check"><input name="showToast" type="checkbox" /> ページごとに最初の自動保存で通知を出す</label>
           <label class="check"><input name="autoload" type="checkbox" /> オートロード: 「すべてのフィールドを保存」した値を、ページを開いたときに空欄へ自動で入れる</label>
           <div class="grid">
@@ -30,8 +31,8 @@
       </section>
 
       <section>
-        <h2>自動保存を一時停止しているサイト</h2>
-        <ul id="paused" class="rows"></ul>
+        <h2 id="sites-title"></h2>
+        <ul id="sites" class="rows"></ul>
       </section>
 
       <section>

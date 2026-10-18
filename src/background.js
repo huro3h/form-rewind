@@ -139,7 +139,7 @@ async function saveSnapshot(s, sender) {
   if (!isValidSnapshot(s) || !ownsKey(sender, s.pageKey)) return { ok: false, error: "INVALID" };
   const settings = await getSettings();
   const top = topOf(sender, s.pageKey, s.domain);
-  if (settings.pausedDomains.includes(top.domain)) return { ok: false, error: "PAUSED" };
+  if (!globalThis.FORM_REWIND_AUTOSAVES(settings, top.domain)) return { ok: false, error: "PAUSED" };
 
   const now = Date.now();
   const keep = s.keep === true;
@@ -290,7 +290,9 @@ async function pageInfo(tabId) {
     ok: true,
     supported: true,
     ...keys,
+    autosave: settings.autosave,
     paused: settings.pausedDomains.includes(keys.domain),
+    enabled: settings.enabledDomains.includes(keys.domain),
     autoload: settings.autoload,
     history: onPage.filter((r) => !r.pinned).map(summaryOf),
     pinned: Array.from(pinned.values()).sort((a, b) => b.timestamp - a.timestamp).map(summaryOf),

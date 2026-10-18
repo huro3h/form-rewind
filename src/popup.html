@@ -45,10 +45,10 @@
           <button id="restore-latest" type="button" class="link" hidden>最新を復元</button>
         </div>
         <ul id="history" class="list"></ul>
-        <p id="history-empty" class="muted small" hidden>このページの履歴はまだありません。入力すると自動で保存されます。</p>
+        <p id="history-empty" class="muted small" hidden></p>
       </section>
 
-      <label class="check footer-check"><input id="paused" type="checkbox" /> このサイトでは自動保存を一時停止する</label>
+      <label class="check footer-check"><input id="site-autosave" type="checkbox" /> <span id="site-autosave-label"></span></label>
     </main>
 
     <section id="diff" hidden>

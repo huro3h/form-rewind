@@ -115,7 +115,13 @@ function renderFieldSetStatus() {
 function render() {
   $("domain").textContent = page.domain;
   $("main").hidden = false;
-  $("paused").checked = page.paused;
+  // 全体の自動保存がオンなら「一時停止する」、オフなら「自動保存する」をサイトごとに選ぶ。
+  $("site-autosave").checked = page.autosave ? page.paused : page.enabled;
+  $("site-autosave-label").textContent = page.autosave ? "このサイトでは自動保存を一時停止する" : "このサイトでは自動保存する";
+  const saving = page.autosave ? !page.paused : page.enabled;
+  $("history-empty").textContent = saving
+    ? "このページの履歴はまだありません。入力すると自動で保存されます。"
+    : "このページの履歴はありません。このサイトでは自動保存していません。";
   $("autoload").checked = page.autoload;
   renderFieldSetStatus();
 
@@ -266,14 +272,16 @@ $("fs-clear").addEventListener("click", async () => {
 
 $("autoload").addEventListener("change", (e) => updateSettings(() => ({ autoload: e.target.checked })));
 
-$("paused").addEventListener("change", (e) => {
-  const paused = e.target.checked;
-  updateSettings((s) => {
-    const list = new Set(s.pausedDomains || []);
-    if (paused) list.add(page.domain);
+$("site-autosave").addEventListener("change", async (e) => {
+  const on = e.target.checked;
+  const key = page.autosave ? "pausedDomains" : "enabledDomains";
+  await updateSettings((s) => {
+    const list = new Set(s[key] || []);
+    if (on) list.add(page.domain);
     else list.delete(page.domain);
-    return { pausedDomains: Array.from(list) };
+    return { [key]: Array.from(list) };
   });
+  await refresh();
 });
 
 $("diff-back").addEventListener("click", closeDiff);

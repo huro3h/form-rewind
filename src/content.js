@@ -61,8 +61,9 @@
 
   // ---- 自動保存 ----
 
+  // iframe ではタブのドメインが分からないので、判定は service worker に任せる。
   function isPausedHere() {
-    return IS_TOP && settings.pausedDomains.includes(location.hostname);
+    return IS_TOP && !globalThis.FORM_REWIND_AUTOSAVES(settings, location.hostname);
   }
 
   function scheduleSave() {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Form Rewind",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "フォームの入力内容を自動で保存し、消えてもワンクリックで復元。履歴の差分を見て項目ごとに戻せる。外部通信なし。",
   "minimum_chrome_version": "102",
   "icons": {

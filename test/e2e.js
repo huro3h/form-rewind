@@ -65,8 +65,17 @@ const check = (name, ok, detail) => {
   const frameOf = (p) => p.frames().find((f) => f.url().endsWith('/frame'));
   const ui = (p) => p.locator('#form-rewind-ui');
 
-  // ---- 自動保存 ----
+  // ---- 自動保存(既定はオフ) ----
   await page.goto(`${BASE}/form`);
+  await sleep(500);
+  await page.fill('#name', '既定では保存しない入力');
+  await sleep(SAVE_WAIT_MS);
+  check('既定では自動保存しない', (await snapshotsOf('/form')).length === 0);
+  check('自動保存しないときは通知も出ない', (await ui(page).locator('.toast').count()) === 0);
+  await sw.evaluate(() =>
+    chrome.storage.local.set({ settings: { ...globalThis.FORM_REWIND_DEFAULTS, autosave: true } })
+  );
+  await page.reload();
   await sleep(500);
   await page.fill('#name', '山田太郎');
   await page.fill('#email', 'taro@example.com');
@@ -366,13 +375,27 @@ const check = (name, ok, detail) => {
 
   // ---- 一時停止 ----
   await sw.evaluate(() =>
-    chrome.storage.local.set({ settings: { ...globalThis.FORM_REWIND_DEFAULTS, pausedDomains: ['localhost'] } })
+    chrome.storage.local.set({ settings: { ...globalThis.FORM_REWIND_DEFAULTS, autosave: true, pausedDomains: ['localhost'] } })
   );
   await sleep(300);
   const pausedBefore = (await snapshotsOf('/form2')).length;
   await page2.fill('#body2', '一時停止中の入力');
   await sleep(SAVE_WAIT_MS);
   check('一時停止中のサイトでは保存しない', (await snapshotsOf('/form2')).length === pausedBefore);
+
+  // ---- 全体がオフでも、ポップアップで選んだサイトは自動保存する ----
+  await sw.evaluate(() => chrome.storage.local.set({ settings: { ...globalThis.FORM_REWIND_DEFAULTS } }));
+  await openPopup();
+  check('全体がオフのときは「このサイトでは自動保存する」を出す', (await popup.locator('#site-autosave-label').textContent()) === 'このサイトでは自動保存する');
+  await popup.locator('#site-autosave').check();
+  await sleep(300);
+  await page2.fill('#body2', '選んだサイトの入力');
+  await sleep(SAVE_WAIT_MS);
+  // 直前の保存から 60 秒以内だと上書きになるので、件数ではなく中身で見る。
+  check(
+    'ポップアップで選んだサイトは自動保存する',
+    (await snapshotsOf('/form2')).some((r) => r.fields.some((f) => f.value === '選んだサイトの入力'))
+  );
 
   check('ページ・ポップアップでエラーが出ない', pageErrors.length === 0, pageErrors.join(' / '));
 

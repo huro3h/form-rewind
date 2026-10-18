@@ -33,7 +33,7 @@ icons/icon.svg     アイコンのソース。PNG は rsvg-convert で書き出�
 | --- | --- |
 | IndexedDB `form-rewind` / `snapshots` | 自動保存の履歴。`pageKey`(そのフレームの origin+pathname)・`topKey`(タブの origin+pathname)・`domain`(タブのホスト)で引く。固定は `pinned / pinName / pinScope` |
 | IndexedDB `form-rewind` / `fieldSets` | すべてのフィールドを保存の中身。キーは origin、`entries` は「フォーム名@タグ:type@name」→ 値 |
-| `chrome.storage.local` `settings` | `maxPerPage` / `retentionDays` / `showToast` / `autoload` / `pausedDomains` |
+| `chrome.storage.local` `settings` | `autosave` / `maxPerPage` / `retentionDays` / `showToast` / `autoload` / `pausedDomains` / `enabledDomains` |
 
 pageKey にクエリ文字列を含めない(`?id=` 違いのページは同じ履歴に入る)。元のフォームキーパーと同じ割り切り。
 
@@ -70,6 +70,12 @@ pageKey にクエリ文字列を含めない(`?id=` 違いのページは同じ�
 飛ばしていた)。default が無いときは「単一選択なら先頭」を初期値として比べる。
 
 ## 自動保存の規則(background.js の saveSnapshot)
+
+- **自動保存は初期値オフ**(2026-10-18 ユーザー要望。ふだんのブラウジングで、ページごとに右下の
+  「自動で保存しています」が出るのが煩わしいため)。`autosave` がオフなら `enabledDomains` のサイトだけ、
+  オンなら `pausedDomains` 以外を保存する。判定は settings.js の `FORM_REWIND_AUTOSAVES` に1つだけ置き、
+  content(最上位のみ)と SW の両方で使う。ポップアップのチェックは `autosave` に応じて
+  「自動保存する」/「一時停止する」に切り替わり、触るリストも変わる。
 
 - content 側は input/change から 1 秒待って保存(打ち続けても 10 秒ごとに必ず)。
   タブを隠したとき・pagehide でも書き出す。

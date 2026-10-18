@@ -86,19 +86,24 @@ function emptyRow(text) {
 async function renderPrefs() {
   const s = await getSettings();
   const form = $("prefs");
+  form.elements.autosave.checked = s.autosave;
   form.elements.showToast.checked = s.showToast;
   form.elements.autoload.checked = s.autoload;
   form.elements.maxPerPage.value = s.maxPerPage;
   form.elements.retentionDays.value = s.retentionDays;
 
-  const paused = s.pausedDomains.map((domain) =>
-    row(domain, "", "再開", async () => {
+  // 全体の自動保存がオンなら一時停止しているサイト、オフなら自動保存するサイトを並べる。
+  const key = s.autosave ? "pausedDomains" : "enabledDomains";
+  $("sites-title").textContent = s.autosave ? "自動保存を一時停止しているサイト" : "自動保存するサイト";
+  const sites = s[key].map((domain) =>
+    row(domain, "", s.autosave ? "再開" : "外す", async () => {
       const current = await getSettings();
-      await setSettings({ pausedDomains: current.pausedDomains.filter((d) => d !== domain) });
+      await setSettings({ [key]: current[key].filter((d) => d !== domain) });
       renderPrefs();
     })
   );
-  $("paused").replaceChildren(...(paused.length ? paused : [emptyRow("ありません。ポップアップから一時停止できます。")]));
+  const empty = s.autosave ? "ありません。ポップアップから一時停止できます。" : "ありません。ポップアップから選べます。";
+  $("sites").replaceChildren(...(sites.length ? sites : [emptyRow(empty)]));
 }
 
 async function renderData() {
@@ -135,6 +140,7 @@ $("prefs").addEventListener("submit", async (e) => {
     return;
   }
   await setSettings({
+    autosave: form.elements.autosave.checked,
     showToast: form.elements.showToast.checked,
     autoload: form.elements.autoload.checked,
     maxPerPage,
@@ -149,7 +155,7 @@ confirmButton($("delete-all"), "入力履歴をすべて削除", async () => {
   renderData();
 });
 
-// ポップアップで一時停止を切り替えたときなどに追随する。
+// ポップアップでサイトの自動保存を切り替えたときなどに追随する。
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[SETTINGS_KEY]) renderPrefs();
 });

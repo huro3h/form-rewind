@@ -1,6 +1,6 @@
 {
   "name": "form-rewind",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "フォームの入力内容を自動保存・復元する Chrome 拡張",
   "scripts": {
