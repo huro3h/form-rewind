@@ -1,6 +1,6 @@
 {
   "name": "form-rewind",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "private": true,
   "description": "フォームの入力内容を保存して自動で入力する Chrome 拡張",
   "scripts": {
