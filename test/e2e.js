@@ -2,10 +2,10 @@
 // 本物のツールバーのポップアップは Playwright から開けないので、popup.html を普通のタブで開き、
 // chrome.tabs.query だけ差し替えて「フォームのタブで開いた」ことにする。
 const { chromium } = require('playwright');
+const { launchBackground } = require('./background-browser.js');
 const os = require('os'), path = require('path'), fs = require('fs');
 const { server, PORT } = require('./fixture.js');
 
-const BRAVE = '/Applications/Brave Browser Nightly.app/Contents/MacOS/Brave Browser Nightly';
 const EXT = path.resolve(__dirname, '..');
 const BASE = `http://localhost:${PORT}`;
 
@@ -19,13 +19,11 @@ const check = (name, ok, detail) => {
 (async () => {
   server.listen(PORT);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'form-rewind-e2e-'));
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    executablePath: BRAVE,
-    headless: false,
-    args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
-  });
-  let [sw] = context.serviceWorkers();
-  if (!sw) sw = await context.waitForEvent('serviceworker');
+  // ブラウザは裏で起動し、作業中のアプリから前面を奪わない (background-browser.js を参照)。
+  const browser = await launchBackground(chromium, { extension: EXT, userDataDir });
+  // ページも裏の窓に1枚ずつ開く。内寸は Playwright の既定ビューポートと同じ 1280×720。
+  const openPage = () => browser.openPage('about:blank', { width: 1280, height: 720 });
+  const sw = await browser.serviceWorker();
   const extId = new URL(sw.url()).host;
 
   // service worker から拡張機能の IndexedDB を直接読む。まだ無ければ作らずに空を返す
@@ -69,7 +67,7 @@ const check = (name, ok, detail) => {
   const tabIdOf = (pathname) =>
     sw.evaluate(async (url) => (await chrome.tabs.query({ url }))[0]?.id, BASE + pathname);
 
-  const page = await context.newPage();
+  const page = await openPage();
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
   const frameOf = (p) => p.frames().find((f) => f.url().endsWith('/frame'));
@@ -93,7 +91,7 @@ const check = (name, ok, detail) => {
 
   // ---- ポップアップ ----
   const formTabId = await tabIdOf('/form');
-  const popup = await context.newPage();
+  const popup = await openPage();
   popup.on('pageerror', (e) => pageErrors.push(`popup: ${e.message}`));
   await popup.addInitScript((id) => {
     const real = chrome.tabs;
@@ -132,7 +130,7 @@ const check = (name, ok, detail) => {
   check('iframe の欄も保存する', keys.some((k) => k.endsWith('@note')));
   check('保存の通知が出る', (await ui(page).locator('.toast').textContent().catch(() => '')).includes('項目を保存しました'));
 
-  const page2 = await context.newPage();
+  const page2 = await openPage();
   page2.on('pageerror', (e) => pageErrors.push(`form2: ${e.message}`));
   await page2.goto(`${BASE}/form2`);
   await sleep(2500);
@@ -177,7 +175,7 @@ const check = (name, ok, detail) => {
   check('再読み込みすると件数は数え直す', (await badgeOf(form2TabId)).text === '3', (await badgeOf(form2TabId)).text);
 
   // ---- 保存したフィールドの編集画面 ----
-  const editor = await context.newPage();
+  const editor = await openPage();
   editor.on('pageerror', (e) => pageErrors.push(`editor: ${e.message}`));
   const editorUrl = `chrome-extension://${extId}/src/saved-fields.html?origin=${encodeURIComponent(BASE)}`;
   await editor.goto(editorUrl);
@@ -219,7 +217,6 @@ const check = (name, ok, detail) => {
   // 編集画面を開いたまま、ページ側で保存し直す → 編集画面からの保存は止まる
   await editor.goto(editorUrl);
   await editor.locator('#rows tr').first().waitFor();
-  await page2.bringToFront();
   await page2.fill('#body2', 'ページで書き直した本文');
   await openPopup();
   await popup.locator('#fs-save').click();
@@ -289,7 +286,7 @@ const check = (name, ok, detail) => {
 
   check('ページ・ポップアップでエラーが出ない', pageErrors.length === 0, pageErrors.join(' / '));
 
-  await context.close();
+  await browser.close();
   server.close();
   console.log(fails ? `\n${fails} 件失敗` : '\nすべて成功');
   process.exit(fails ? 1 : 0);
