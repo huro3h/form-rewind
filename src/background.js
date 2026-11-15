@@ -135,8 +135,13 @@ const TAG_PATTERN = /^[A-Z][A-Z0-9-]*$/;
 const KEY_MAX = 2000;
 
 // 書き出し先のファイルに上書きして git で差分を見るので、書き出した時刻は入れず、
-// サイトはオリジン順・項目はキー順に並べる(保存し直しで並びが変わっても差分にしない)
-const sortedEntries = (entries) => Object.fromEntries(Object.keys(entries).sort().map((k) => [k, entries[k]]));
+// サイトはオリジン順に、項目とその中身のキーは名前順に並べる(保存し直しや編集画面での書き換えで
+// キーの並びが変わっても差分にしない)。配列の並びはそのまま
+function sortKeys(value) {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((k) => [k, sortKeys(value[k])]));
+}
 
 async function exportFieldSets() {
   const sets = await DB.allFieldSets();
@@ -146,7 +151,7 @@ async function exportFieldSets() {
       format: EXPORT_FORMAT,
       version: EXPORT_VERSION,
       sites: sets
-        .map(({ origin, updatedAt, entries }) => ({ origin, updatedAt, entries: sortedEntries(entries) }))
+        .map(({ origin, updatedAt, entries }) => ({ origin, updatedAt, entries: sortKeys(entries) }))
         .sort((a, b) => (a.origin < b.origin ? -1 : a.origin > b.origin ? 1 : 0)),
     },
   };
