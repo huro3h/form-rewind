@@ -26,6 +26,10 @@ h1 {
   gap: 8px;
 }
 
+.export-target {
+  overflow-wrap: anywhere;
+}
+
 .top p {
   margin: 0;
   max-width: 760px;

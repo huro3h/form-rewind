@@ -35,6 +35,7 @@ src/db.js          IndexedDB(fieldSets)
 src/popup.*        ポップアップ(保存・読み込み・消去・オートロードの切り替え)
 src/options.*      設定画面
 src/saved-fields.* 「すべてのフィールドを保存」の中身を表で見せて編集する画面
+src/export-file.js エクスポートの書き出し先(保存ダイアログで選んだファイルのハンドル)の記憶と上書き
 test/e2e.js        E2E。test/fixture.js がテスト用サーバ(8766)
 icons/icon.svg     アイコンのソース。PNG は rsvg-convert で書き出す
 ```
@@ -139,14 +140,26 @@ Lightning AutoFill の Form Fields 画面(ルールを表で並べ、行ごと�
 
 ### エクスポート / インポート
 
-- 形式は `{ format: "form-rewind-fields", version: 1, exportedAt, sites: [{ origin, updatedAt, entries }] }`。
-  全サイトを1ファイルにする。ダウンロードは Blob + `a[download]`(`downloads` 権限は要らない)。
+- 形式は `{ format: "form-rewind-fields", version: 1, sites: [{ origin, updatedAt, entries }] }`。全サイトを1ファイルにする。
+- **書き出し先は固定のファイルに上書きする(2.2.0、2026-11-15 ユーザーの依頼)。** 書き出したファイルを git(個人設定用の
+  プライベートリポジトリ)で管理して差分を見るため、~/projects の設定を書き出す拡張機能をそろえて同じ形にした。
+  `src/export-file.js`(settings.js と同じくモジュールにせず `globalThis.FORM_REWIND_EXPORT_FILE`):初回は
+  `showSaveFilePicker`(id `form-rewind-export`、初期名 `form-rewind-fields.json`)で選び、ハンドルを IndexedDB
+  `form-rewind-export`/`handles`/`exportFile` に入れる(保存したフィールドの DB `form-rewind` とは分けた。版上げの
+  `onupgradeneeded` に巻き込まないため)。次からは `queryPermission` → 許可が切れていれば `requestPermission` → 断られたら選び直し。
+  「変更」は選び直してそのまま書き出す。拡張機能から見えるのはファイル名だけ。
+- 差分にならないよう、`exportedAt` を消し、ファイル名から日付を外し、**サイトはオリジン順・`entries` はキー順**に並べ直す
+  (`entries` は保存し直すたびに挿入順が変わりうる)。インポートは統合なので並びは関係ない。末尾に改行。
+- **Brave には `showSaveFilePicker` が無い**ので、`a[download]`(`downloads` 権限は要らない)で同じ名前のファイルをダウンロードし、
+  「変更」を隠す。E2E は Brave で回るのでこちらの経路を見ている。ダイアログの経路はスクラッチのスクリプトで
+  `showSaveFilePicker` を OPFS のハンドルを返すものに差し替えて確かめた(初期名・並び・時刻なし・2回目はダイアログなし・同じ中身・「変更」)。
+  **未確認:** 本物の保存ダイアログと、再起動後の許可の確認(Chrome で手で確かめる)
 - インポートはサイトごとに **統合**(同じキーはファイル側で上書き、無いキーは残す)。丸ごと置き換えにしないのは、
   別の端末から持ってきたファイルで、こちらにしかない分を消さないため。
 - ファイルは手で書き換えられうるので、SW の `cleanImport` で検査し直す。format / version が違う、
   origin が http(s) のオリジンそのものでない、項目の tag が大文字のタグ名でない、値が1つも無い、
   のどれかがあれば**全体を読み込まない**(一部だけ入るのは分かりにくい)。項目は知っている属性だけを拾い直す。
-- 未保存の編集があるあいだは両方のボタンを無効にする(エクスポートに編集が入らない・インポートと競合する)。
+- 未保存の編集があるあいだは両方のボタンと「変更」を無効にする(エクスポートに編集が入らない・インポートと競合する)。
 
 ### バッジ
 

@@ -7,6 +7,7 @@ const DEFAULTS = globalThis.FORM_REWIND_DEFAULTS;
 const SETTINGS_KEY = globalThis.FORM_REWIND_SETTINGS_KEY;
 const CONFIRM_MS = 3000;
 const MESSAGE_MS = 5000;
+const EXPORT_FILE = globalThis.FORM_REWIND_EXPORT_FILE;
 
 const TYPE_LABELS = {
   text: "テキスト",
@@ -107,7 +108,7 @@ function updateSavebar() {
   const dirty = isDirty();
   $("savebar").hidden = !dirty;
   // 未保存の編集があるとエクスポートに含まれず、インポートとは競合するので、その間は押せなくする。
-  for (const id of ["export", "import"]) {
+  for (const id of ["export", "import", "export-change"]) {
     $(id).disabled = dirty;
     $(id).title = dirty ? "先に保存するか元に戻してください" : "";
   }
@@ -383,28 +384,41 @@ const IMPORT_ERRORS = {
   TOO_LARGE: "ファイルが大きすぎます。",
 };
 
-function dateStamp() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+// 書き出し先は初回に選んだファイル(export-file.js)。拡張機能から見えるのはファイル名だけで、フォルダは分からない
+function showExportTarget(handle) {
+  if (!EXPORT_FILE.canPickFile) {
+    $("export-target").textContent = "ダウンロードフォルダ(このブラウザは書き出し先を選べません)";
+    $("export-change").hidden = true;
+    return;
+  }
+  $("export-target").textContent = handle ? handle.name : "未設定(初回に選びます)";
 }
 
-$("export").addEventListener("click", async () => {
+async function exportFields(choose) {
   const res = await send({ type: "EXPORT_FIELD_SETS" });
   if (!res.ok || !res.data.sites.length) {
     showMessage(res.ok ? "エクスポートするものがありません。" : "エクスポートできませんでした。", !res.ok);
     return;
   }
-  const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `form-rewind-fields-${dateStamp()}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  let result;
+  try {
+    result = await EXPORT_FILE.write(`${JSON.stringify(res.data, null, 2)}\n`, { choose });
+  } catch {
+    showMessage("エクスポートできませんでした。「変更」から書き出し先を選び直してください。", true);
+    return;
+  }
+  if (!result) {
+    showMessage("エクスポートをやめました。");
+    return;
+  }
+  if (!result.downloaded) showExportTarget(await EXPORT_FILE.loadHandle());
   const count = res.data.sites.reduce((n, s) => n + Object.keys(s.entries).length, 0);
-  showMessage(`${res.data.sites.length}サイト・${count}項目をエクスポートしました。`);
-});
+  showMessage(`${result.name} に ${res.data.sites.length}サイト・${count}項目をエクスポートしました。`);
+}
+
+$("export").addEventListener("click", () => exportFields(false));
+$("export-change").addEventListener("click", () => exportFields(true));
+EXPORT_FILE.loadHandle().then(showExportTarget);
 
 $("import").addEventListener("click", () => $("import-file").click());
 

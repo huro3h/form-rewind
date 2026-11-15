@@ -245,9 +245,15 @@ const check = (name, ok, detail) => {
   const exportPath = await download.path();
   const exported = JSON.parse(fs.readFileSync(exportPath, 'utf8'));
   check(
-    'JSON でエクスポートできる',
-    download.suggestedFilename().startsWith('form-rewind-fields-') &&
+    '書き出し先を選べないブラウザ(Brave)では「変更」を出さない',
+    (await editor.locator('#export-change').isHidden()) && (await editor.locator('#export-target').textContent()).includes('ダウンロード')
+  );
+  check(
+    'JSON でエクスポートできる(固定のファイル名・時刻なし・項目はキー順)',
+    download.suggestedFilename() === 'form-rewind-fields.json' &&
       exported.format === 'form-rewind-fields' &&
+      !('exportedAt' in exported) &&
+      JSON.stringify(Object.keys(exported.sites[0].entries)) === JSON.stringify(Object.keys(exported.sites[0].entries).sort()) &&
       exported.sites.length === 1 &&
       exported.sites[0].origin === BASE &&
       Object.values(exported.sites[0].entries).some((e) => e.auto === false)
@@ -261,7 +267,11 @@ const check = (name, ok, detail) => {
   const [imported] = await dbAll('fieldSets');
   check(
     'JSON からインポートすると元に戻る(「自動」の設定も)',
-    !!imported && JSON.stringify(imported.entries) === JSON.stringify(beforeExport) && (await editor.locator('#rows tr').count()) > 0
+    !!imported &&
+      // エクスポートは項目をキー順に並べるので、並びは比べない
+      Object.keys(imported.entries).length === Object.keys(beforeExport).length &&
+      Object.entries(beforeExport).every(([k, v]) => JSON.stringify(imported.entries[k]) === JSON.stringify(v)) &&
+      (await editor.locator('#rows tr').count()) > 0
   );
 
   const brokenPath = path.join(userDataDir, 'broken.json');

@@ -134,6 +134,10 @@ const EXPORT_VERSION = 1;
 const TAG_PATTERN = /^[A-Z][A-Z0-9-]*$/;
 const KEY_MAX = 2000;
 
+// 書き出し先のファイルに上書きして git で差分を見るので、書き出した時刻は入れず、
+// サイトはオリジン順・項目はキー順に並べる(保存し直しで並びが変わっても差分にしない)
+const sortedEntries = (entries) => Object.fromEntries(Object.keys(entries).sort().map((k) => [k, entries[k]]));
+
 async function exportFieldSets() {
   const sets = await DB.allFieldSets();
   return {
@@ -141,8 +145,9 @@ async function exportFieldSets() {
     data: {
       format: EXPORT_FORMAT,
       version: EXPORT_VERSION,
-      exportedAt: new Date().toISOString(),
-      sites: sets.map(({ origin, updatedAt, entries }) => ({ origin, updatedAt, entries })),
+      sites: sets
+        .map(({ origin, updatedAt, entries }) => ({ origin, updatedAt, entries: sortedEntries(entries) }))
+        .sort((a, b) => (a.origin < b.origin ? -1 : a.origin > b.origin ? 1 : 0)),
     },
   };
 }

@@ -17,6 +17,10 @@
           <input id="import-file" type="file" accept=".json,application/json" hidden />
         </div>
       </div>
+      <p class="muted small export-target">
+        エクスポート先: <span id="export-target">未設定(初回に選びます)</span>
+        <button id="export-change" class="link small" type="button">変更</button>
+      </p>
       <p class="muted small">
         「すべてのフィールドを保存」で保存した値です。値はその場で編集できます。
         「自動」を外した項目は、オートロードでは入れず、手動の「すべて読み込む」でだけ入れます。
@@ -69,6 +73,7 @@
     <p id="message" class="message toast" role="status" hidden></p>
 
     <script src="settings.js"></script>
+    <script src="export-file.js"></script>
     <script src="saved-fields.js"></script>
   </body>
 </html>
