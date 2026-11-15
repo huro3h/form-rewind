@@ -17,10 +17,12 @@
           <input id="import-file" type="file" accept=".json,application/json" hidden />
         </div>
       </div>
-      <p class="muted small export-target">
-        エクスポート先: <span id="export-target">未設定(初回に選びます)</span>
-        <button id="export-change" class="link small" type="button">変更</button>
-      </p>
+      <div class="muted small export-target">
+        <label for="export-name">エクスポート先:</label>
+        <span id="export-dir">(フォルダは初回に選びます)</span><span class="export-sep">/</span>
+        <input id="export-name" type="text" spellcheck="false" autocomplete="off" />
+        <button id="export-change" class="link small" type="button">フォルダを変更</button>
+      </div>
       <p class="muted small">
         「すべてのフィールドを保存」で保存した値です。値はその場で編集できます。
         「自動」を外した項目は、オートロードでは入れず、手動の「すべて読み込む」でだけ入れます。

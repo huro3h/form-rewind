@@ -1,17 +1,22 @@
-// エクスポートを、一度選んだファイルへの上書きにする(git で管理しているフォルダに置いて差分を見るため)。
+// エクスポートを、選んだフォルダの中の決まったファイルへの上書きにする(git で管理しているフォルダに置いて差分を見るため)。
 //
-// 書き出し先は初回に保存ダイアログ(File System Access API の showSaveFilePicker)で選び、
-// そのファイルのハンドルを IndexedDB に覚えておく(保存したフィールドとは別の DB)。ブラウザ・プロフィールごと。
-// showSaveFilePicker が無いブラウザ(Brave など)では、固定の名前でダウンロードする。
+// フォルダは初回に showDirectoryPicker で選び、そのハンドルを IndexedDB に覚えておく。ファイル名は画面の欄で決め、
+// 同じ IndexedDB に覚える(どちらもブラウザ・プロフィールごと)。
+// ファイルではなくフォルダを選ぶのは、画面に「フォルダ名/ファイル名」を出すため(ファイルのハンドルからは
+// ファイル名しか分からない。フォルダのハンドルもフォルダ名だけで、フルパスは分からない)。
+// 保存したフィールドの DB(form-rewind)とは別の DB にしている。
+// showDirectoryPicker が無いブラウザ(Brave など)では、同じファイル名でダウンロードする。
 // saved-fields.js から globalThis.FORM_REWIND_EXPORT_FILE として使う(settings.js と同じくモジュールにしない)。
 
 (() => {
-  const FILE_NAME = "form-rewind-fields.json";
   const DB_NAME = "form-rewind-export";
   const STORE = "handles";
-  const HANDLE_KEY = "exportFile";
+  const DIR_KEY = "exportDir";
+  const NAME_KEY = "fileName";
+  const OLD_FILE_KEY = "exportFile"; // 2.2.x で覚えていたファイルのハンドル。ファイル名の初期値にだけ使う
+  const DEFAULT_NAME = "form-rewind-fields.json";
 
-  const canPickFile = typeof window.showSaveFilePicker === "function";
+  const canPickFolder = typeof window.showDirectoryPicker === "function";
 
   function openDb() {
     return new Promise((resolve, reject) => {
@@ -36,66 +41,88 @@
     }
   }
 
-  // 覚えている書き出し先のハンドル。なければ null
-  async function loadHandle() {
+  async function load(key) {
     try {
-      return (await withStore("readonly", (store) => store.get(HANDLE_KEY))) ?? null;
+      return (await withStore("readonly", (store) => store.get(key))) ?? null;
     } catch (e) {
       return null;
     }
   }
 
-  // 保存ダイアログで書き出し先を選ぶ。キャンセルなら null
-  async function pickHandle(current) {
+  const save = (key, value) => withStore("readwrite", (store) => store.put(value, key));
+
+  // 覚えている書き出し先のフォルダのハンドル。なければ null
+  const loadExportDir = () => load(DIR_KEY);
+
+  // 書き出すファイル名。決めていなければ、2.2.x で選んでいたファイルの名前か、初期値
+  async function loadFileName() {
+    return (await load(NAME_KEY)) ?? (await load(OLD_FILE_KEY))?.name ?? DEFAULT_NAME;
+  }
+
+  // 欄に入れられた名前を確かめて覚える。フォルダの外を指す名前は受け付けない。.json が無ければ足す。
+  // 覚えた名前を返す。使えない名前なら例外
+  async function saveFileName(input) {
+    let name = input.trim();
+    if (!name || /[/\\:]/.test(name) || name.startsWith(".")) {
+      throw new Error("ファイル名に / \\ : は使えません。先頭を . にもできません");
+    }
+    if (!name.toLowerCase().endsWith(".json")) name += ".json";
+    await save(NAME_KEY, name);
+    return name;
+  }
+
+  // フォルダを選ぶ。キャンセルなら null
+  async function pickDir(current) {
     try {
-      const handle = await window.showSaveFilePicker({
+      const dir = await window.showDirectoryPicker({
         id: DB_NAME, // 前回選んだフォルダから開く
-        suggestedName: current ? current.name : FILE_NAME,
-        ...(current ? { startIn: current } : {}),
-        types: [{ description: "JSON", accept: { "application/json": [".json"] } }]
+        mode: "readwrite",
+        ...(current ? { startIn: current } : {})
       });
-      await withStore("readwrite", (store) => store.put(handle, HANDLE_KEY));
-      return handle;
+      await save(DIR_KEY, dir);
+      return dir;
     } catch (e) {
       if (e && e.name === "AbortError") return null;
       throw e;
     }
   }
 
-  function download(text) {
+  function download(text, name) {
     const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = FILE_NAME;
+    a.download = name;
     a.click();
     // すぐに破棄するとダウンロードが始まる前に URL が消えることがある
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
-  // text を書き出し先に上書きする。ボタンのクリックの中で呼ぶ(ダイアログと許可の確認にクリックが要る)。
-  // choose なら覚えている書き出し先を使わずに選び直す。
-  // 戻り値: { name } 書き出したファイル名 / { name, downloaded: true } ダウンロードした / null キャンセル。
-  // ファイルが消された・移動されたなどで書けなければ例外。
-  async function write(text, { choose = false } = {}) {
-    if (!canPickFile) {
-      download(text);
-      return { name: FILE_NAME, downloaded: true };
+  // text を書き出し先のフォルダの、決めたファイル名のファイルに上書きする(無ければ作る)。
+  // ボタンを押した処理の中で呼ぶ(フォルダの選択と許可の確認にクリックが要る)。chooseDir ならフォルダを選び直す。
+  // 戻り値: { path: "フォルダ名/ファイル名" } / { path: ファイル名, downloaded: true } ダウンロードした / null キャンセル。
+  // フォルダが消された・移動されたなどで書けなければ例外(選び直してもらう)。
+  async function exportToFile(text, { chooseDir = false } = {}) {
+    const name = await loadFileName();
+    if (!canPickFolder) {
+      download(text, name);
+      return { path: name, downloaded: true };
     }
-    const current = await loadHandle();
-    let handle = choose ? null : current;
+    const current = await loadExportDir();
+    let dir = chooseDir ? null : current;
     // 書き込みの許可はブラウザを再起動すると確認し直しになる。断られたら選び直してもらう
-    if (handle && (await handle.queryPermission({ mode: "readwrite" })) !== "granted") {
-      if ((await handle.requestPermission({ mode: "readwrite" })) !== "granted") handle = null;
+    if (dir && (await dir.queryPermission({ mode: "readwrite" })) !== "granted") {
+      if ((await dir.requestPermission({ mode: "readwrite" })) !== "granted") dir = null;
     }
-    if (!handle) {
-      handle = await pickHandle(current);
-      if (!handle) return null;
+    if (!dir) {
+      dir = await pickDir(current);
+      if (!dir) return null;
     }
-    const writable = await handle.createWritable();
+    const file = await dir.getFileHandle(name, { create: true });
+    const writable = await file.createWritable();
     await writable.write(text);
     await writable.close();
-    return { name: handle.name };
+    return { path: `${dir.name}/${name}` };
   }
 
-  globalThis.FORM_REWIND_EXPORT_FILE = { canPickFile, loadHandle, write };
+  globalThis.FORM_REWIND_EXPORT_FILE = { canPickFolder, loadExportDir, loadFileName, saveFileName, exportToFile };
 })();

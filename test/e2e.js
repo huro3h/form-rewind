@@ -246,7 +246,7 @@ const check = (name, ok, detail) => {
   const exported = JSON.parse(fs.readFileSync(exportPath, 'utf8'));
   check(
     '書き出し先を選べないブラウザ(Brave)では「変更」を出さない',
-    (await editor.locator('#export-change').isHidden()) && (await editor.locator('#export-target').textContent()).includes('ダウンロード')
+    (await editor.locator('#export-change').isHidden()) && (await editor.locator('#export-dir').textContent()).includes('ダウンロード')
   );
   check(
     'JSON でエクスポートできる(固定のファイル名・時刻なし・項目はキー順)',

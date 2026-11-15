@@ -26,8 +26,24 @@ h1 {
   gap: 8px;
 }
 
+/* エクスポート先: フォルダ名 / ファイル名の欄 / フォルダを変更 */
 .export-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 4px;
   overflow-wrap: anywhere;
+}
+
+.export-sep {
+  margin-left: -4px;
+}
+
+#export-name {
+  width: 22em;
+  max-width: 100%;
+  padding: 2px 6px;
 }
 
 .top p {

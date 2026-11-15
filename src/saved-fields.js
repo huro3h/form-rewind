@@ -108,7 +108,7 @@ function updateSavebar() {
   const dirty = isDirty();
   $("savebar").hidden = !dirty;
   // 未保存の編集があるとエクスポートに含まれず、インポートとは競合するので、その間は押せなくする。
-  for (const id of ["export", "import", "export-change"]) {
+  for (const id of ["export", "import", "export-change", "export-name"]) {
     $(id).disabled = dirty;
     $(id).title = dirty ? "先に保存するか元に戻してください" : "";
   }
@@ -384,17 +384,27 @@ const IMPORT_ERRORS = {
   TOO_LARGE: "ファイルが大きすぎます。",
 };
 
-// 書き出し先は初回に選んだファイル(export-file.js)。拡張機能から見えるのはファイル名だけで、フォルダは分からない
-function showExportTarget(handle) {
-  if (!EXPORT_FILE.canPickFile) {
-    $("export-target").textContent = "ダウンロードフォルダ(このブラウザは書き出し先を選べません)";
+// 書き出し先は、初回に選んだフォルダの中の、欄で決めたファイル名のファイル(export-file.js)。
+// フォルダは名前しか分からない(フルパスは拡張機能から見えない)
+async function showExportTarget() {
+  $("export-name").value = await EXPORT_FILE.loadFileName();
+  if (!EXPORT_FILE.canPickFolder) {
+    $("export-dir").textContent = "ダウンロードフォルダ(このブラウザはフォルダを選べません)";
     $("export-change").hidden = true;
     return;
   }
-  $("export-target").textContent = handle ? handle.name : "未設定(初回に選びます)";
+  const dir = await EXPORT_FILE.loadExportDir();
+  $("export-dir").textContent = dir ? dir.name : "(フォルダは初回に選びます)";
 }
 
-async function exportFields(choose) {
+async function exportFields(chooseDir) {
+  // 欄を書き換えたままボタンを押したときも、その名前で書き出す
+  try {
+    $("export-name").value = await EXPORT_FILE.saveFileName($("export-name").value);
+  } catch (e) {
+    showMessage(e.message, true);
+    return;
+  }
   const res = await send({ type: "EXPORT_FIELD_SETS" });
   if (!res.ok || !res.data.sites.length) {
     showMessage(res.ok ? "エクスポートするものがありません。" : "エクスポートできませんでした。", !res.ok);
@@ -402,23 +412,36 @@ async function exportFields(choose) {
   }
   let result;
   try {
-    result = await EXPORT_FILE.write(`${JSON.stringify(res.data, null, 2)}\n`, { choose });
+    result = await EXPORT_FILE.exportToFile(`${JSON.stringify(res.data, null, 2)}\n`, { chooseDir });
   } catch {
-    showMessage("エクスポートできませんでした。「変更」から書き出し先を選び直してください。", true);
+    showMessage("エクスポートできませんでした。「フォルダを変更」から書き出し先を選び直してください。", true);
     return;
   }
   if (!result) {
     showMessage("エクスポートをやめました。");
     return;
   }
-  if (!result.downloaded) showExportTarget(await EXPORT_FILE.loadHandle());
+  await showExportTarget();
   const count = res.data.sites.reduce((n, s) => n + Object.keys(s.entries).length, 0);
-  showMessage(`${result.name} に ${res.data.sites.length}サイト・${count}項目をエクスポートしました。`);
+  showMessage(`${result.path} に ${res.data.sites.length}サイト・${count}項目をエクスポートしました。`);
 }
+
+// ファイル名は欄から離れたとき・Enter で覚える。使えない名前なら覚えている名前に戻す
+$("export-name").addEventListener("change", async () => {
+  try {
+    $("export-name").value = await EXPORT_FILE.saveFileName($("export-name").value);
+  } catch (e) {
+    showMessage(e.message, true);
+    $("export-name").value = await EXPORT_FILE.loadFileName();
+  }
+});
+$("export-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.isComposing) $("export-name").blur();
+});
 
 $("export").addEventListener("click", () => exportFields(false));
 $("export-change").addEventListener("click", () => exportFields(true));
-EXPORT_FILE.loadHandle().then(showExportTarget);
+showExportTarget();
 
 $("import").addEventListener("click", () => $("import-file").click());
 

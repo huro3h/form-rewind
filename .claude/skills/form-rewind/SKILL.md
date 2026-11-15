@@ -35,7 +35,7 @@ src/db.js          IndexedDB(fieldSets)
 src/popup.*        ポップアップ(保存・読み込み・消去・オートロードの切り替え)
 src/options.*      設定画面
 src/saved-fields.* 「すべてのフィールドを保存」の中身を表で見せて編集する画面
-src/export-file.js エクスポートの書き出し先(保存ダイアログで選んだファイルのハンドル)の記憶と上書き
+src/export-file.js エクスポートの書き出し先(選んだフォルダのハンドルとファイル名)の記憶と上書き
 test/e2e.js        E2E。test/fixture.js がテスト用サーバ(8766)
 icons/icon.svg     アイコンのソース。PNG は rsvg-convert で書き出す
 ```
@@ -141,27 +141,33 @@ Lightning AutoFill の Form Fields 画面(ルールを表で並べ、行ごと�
 ### エクスポート / インポート
 
 - 形式は `{ format: "form-rewind-fields", version: 1, sites: [{ origin, updatedAt, entries }] }`。全サイトを1ファイルにする。
-- **書き出し先は固定のファイルに上書きする(2.2.0、2026-11-15 ユーザーの依頼)。** 書き出したファイルを git(個人設定用の
-  プライベートリポジトリ)で管理して差分を見るため、~/projects の設定を書き出す拡張機能をそろえて同じ形にした。
+- **書き出し先は「選んだフォルダ/欄で決めたファイル名」に上書きする。** 書き出したファイルを git(個人設定用の
+  プライベートリポジトリ)で管理して差分を見るため、~/projects の設定を書き出す拡張機能をそろえて同じ形にした(2026-11-15 ユーザーの依頼)。
+  2.2.0 は `showSaveFilePicker` でファイルを選んでいたが、ファイルのハンドルからは**ファイル名しか分からず**、画面に場所を出せなかった。
+  ファイル名を拡張機能側で持ってほしいという要望もあり、2.3.0 で bookmark-set-opener 2.7.0 と同じ形に変えた。
   `src/export-file.js`(settings.js と同じくモジュールにせず `globalThis.FORM_REWIND_EXPORT_FILE`):初回は
-  `showSaveFilePicker`(id `form-rewind-export`、初期名 `form-rewind-fields.json`)で選び、ハンドルを IndexedDB
-  `form-rewind-export`/`handles`/`exportFile` に入れる(保存したフィールドの DB `form-rewind` とは分けた。版上げの
-  `onupgradeneeded` に巻き込まないため)。次からは `queryPermission` → 許可が切れていれば `requestPermission` → 断られたら選び直し。
-  「変更」は選び直してそのまま書き出す。拡張機能から見えるのはファイル名だけ。
+  `showDirectoryPicker`(id `form-rewind-export`、`mode: "readwrite"`)でフォルダを選び、IndexedDB `form-rewind-export`/`handles` に
+  `exportDir`(フォルダのハンドル)と `fileName` を入れる(保存したフィールドの DB `form-rewind` とは分けた。版上げの
+  `onupgradeneeded` に巻き込まないため)。`fileName` が無ければ 2.2.x の `exportFile`(ファイルのハンドル)の名前 → `form-rewind-fields.json`。
+  書き出すたびに `queryPermission` → 許可が切れていれば `requestPermission` → 断られたら選び直し、`dir.getFileHandle(name, { create: true })`。
+  フォルダのハンドルもフォルダ名しか持たない(フルパスは見えない)。
+- ファイル名の欄は `change`(離れたとき・Enter)で保存する。`/ \ :` を含む・先頭が `.`・空は受け付けず元に戻す。`.json` が無ければ足す。
+  エクスポートを押したときにも欄の値を先に保存する(欄を書き換えたまま押すと、`change` の保存と書き出しが前後しうるため)。
 - 差分にならないよう、`exportedAt` を消し、ファイル名から日付を外し、**サイトはオリジン順・`entries` はキー順**に並べ直す
   (`entries` は保存し直すたびに挿入順が変わりうる)。2.2.1 から項目の中身のキーも `sortKeys()` で再帰的に名前順にする
   (yt-quick-filter で、storage から読んだ値と画面で作った値のキーの並びが違って差分が出るのを測って気づいた。こちらも
   content script と編集画面で項目を作る経路が別)。インポートは統合なので並びは関係ない。末尾に改行。
-- **Brave には `showSaveFilePicker` が無い**ので、`a[download]`(`downloads` 権限は要らない)で同じ名前のファイルをダウンロードし、
-  「変更」を隠す。E2E は Brave で回るのでこちらの経路を見ている。ダイアログの経路はスクラッチのスクリプトで
-  `showSaveFilePicker` を OPFS のハンドルを返すものに差し替えて確かめた(初期名・並び・時刻なし・2回目はダイアログなし・同じ中身・「変更」)。
-  **未確認:** 本物の保存ダイアログと、再起動後の許可の確認(Chrome で手で確かめる)
+- **Brave には `showDirectoryPicker` も `showSaveFilePicker` も無い**ので、`a[download]`(`downloads` 権限は要らない)で欄のファイル名で
+  ダウンロードし、「フォルダを変更」を隠す。E2E は Brave で回るのでこちらの経路を見ている。フォルダの経路はスクラッチのスクリプトで
+  `showDirectoryPicker` を OPFS の中のフォルダを返すものに差し替えて確かめた(2.2.x のファイル名の引き継ぎ・「フォルダ名/ファイル名」の
+  表示・中身・2回目は選ばない・使えない名前は戻す・フォルダの変更・未保存の編集中は欄も無効)。
+  **未確認:** 本物のフォルダ選択ダイアログと、再起動後の許可の確認(Chrome で手で確かめる)
 - インポートはサイトごとに **統合**(同じキーはファイル側で上書き、無いキーは残す)。丸ごと置き換えにしないのは、
   別の端末から持ってきたファイルで、こちらにしかない分を消さないため。
 - ファイルは手で書き換えられうるので、SW の `cleanImport` で検査し直す。format / version が違う、
   origin が http(s) のオリジンそのものでない、項目の tag が大文字のタグ名でない、値が1つも無い、
   のどれかがあれば**全体を読み込まない**(一部だけ入るのは分かりにくい)。項目は知っている属性だけを拾い直す。
-- 未保存の編集があるあいだは両方のボタンと「変更」を無効にする(エクスポートに編集が入らない・インポートと競合する)。
+- 未保存の編集があるあいだは両方のボタンと「フォルダを変更」・ファイル名の欄を無効にする(エクスポートに編集が入らない・インポートと競合する)。
 
 ### バッジ
 
